@@ -1,71 +1,82 @@
 # Deploy clpwitnessd with ACI
 
 ## Index
+- [Overview](#overview)
 - [Prerequisite](#prerequisite)
-- [Create a Container Registry on Azure](#create-a-container-registry-on-azure)
-- [Pull and Push Container Image](#pull-and-push-container-image)
 - [Deploy Witness Server](#deploy-witness-server)
 - [Set Witness Server to Cluster Properties](#set-witness-server-to-cluster-properties)
-- [Link](#link)
 
+## Overview
+- The cluster nodes are running on availability zone 1 and 2.
+- The witness server runs on a different subnet.
+  ```
+             +-------------------------+
+             | Container Instance      |
+             | clpwitnessd             |
+             | 10.0.1.4/24             |
+             +------------+------------+
+                          |
+             +------------+------------+
+             |                         |
+  +----------+----------+   +----------+----------+
+  | Virtual Machine     |   | Virtual Machine     |
+  | Availability zone 1 |   | Availability zone 2 |
+  | centos01            |   | centos02            |
+  | 10.0.0.6/24         |   | 10.0.0.7/24         |
+  +---------------------+   +---------------------+
+  ```
 
 ## Prerequisite
-- Azure account.
-- Linux machine to get a Docker image.
-
-## Create a Container Registry on Azure
-- Refer to the following steps to create a registry.
-  - https://github.com/EXPRESSCLUSTER/App-Service/blob/main/DeployCWO.md#create-a-container-registry-on-azure
-
-## Pull and Push Container Image
-1. Pull clpwitnessd container image to your Linux machine.
-   ```sh
-   # docker pull docker.io/expresscluster/clpwitnessd:4.2.0
-   ```
-1. Change the tag as below.
-   ```sh
-   # docker tag docker.io/expresscluster/clpwitnessd:4.2.0 <your registry name>.azurecr.io/clpwitnessd:4.2.0
-   ```
-1. Login to your registry.
-   ```sh
-   # docker login <your registry name>.azurecr.io --username <your user name>
-   Password: <enter your password>
-   ```
-1. Push the Cluster WebUI Offline container image.
-   ```sh
-   # docker push <your registry name>.azurecr.io/clpwitnessd:4.2.0
-   ```
+- Create subnet (e.g. Name: witnessd, IP Address: 10.0.1.0/24) in advance.
 
 ## Deploy Witness Server
 1. Click **Container instances** icon and click **Create**.
 1. Set the following parameters and create the container.
    - Basics
      - Resource group: your resource group
-     - Container name: your application name (E.g. clpwitness)
+     - Container name: your application name (E.g. clpwitnessd)
      - Region: your region
-     - Image source: Azure Container Registry 
-     - Registry: your registry
-     - Image: clpwitnessd
-     - Image tag: select tag
+     - Image source: Docker Hub or other registry
+     - Image type: Public
+     - Image: expresscluster/clpwitnessd
+       - Fore more detail, please visit: https://hub.docker.com/r/expresscluster/clpwitnessd.
+     - OS type: Linux
    - Networking
-     - Networking type: Public
-     - DNS name label: clpwitness-420
+     - Networking type: Private
+     - Virtual network: your virtual network
+     - Subnet: your subnet that [you created in advance](#prerequisite)
      - Ports: 80
+   - Advanced
+     - Restart policy: OS failure
+   - Tags
+     - Set your own tags.
 
 ## Set Witness Server to Cluster Properties
 1. Start Cluster WebUI and change **Config** mode.
 1. Open **Cluster Properties** and click **Interconnect** tab.
 1. Click **Add** and select **Witness**.
 1. Click **Properties** and set the following parameter.
-   - Target Host: clpwitness-420.japaneast.azurecontainer.io
+   - Target Host: private IP address of the container instance (e.g. 10.0.1.4).
    - Service Port: 80
    - See also; 
-     - https://www.manuals.nec.co.jp/contents/system/files/nec_manuals/node/504/W42_RG_EN/W_RG_02.html#interconnect-tab
-     - https://www.manuals.nec.co.jp/contents/system/files/nec_manuals/node/505/L42_RG_EN/L_RG_02.html#interconnect-tab 
-
-## Link
-- Witness Server
-  - The following containers run with Fukunaga's Visual Studio account. If the cost reaches the limit, the containers stop.
-    - http://clpwitness-420.japaneast.azurecontainer.io/
-- Migrate custom software to Azure App Service using a custom container
-  - https://docs.microsoft.com/en-us/azure/app-service/tutorial-custom-container?pivots=container-linux
+     - Windows: https://www.manuals.nec.co.jp/contents/system/files/nec_manuals/node/539/W43_RG_EN/W_RG_02.html#interconnect-tab
+     - Linux: https://www.manuals.nec.co.jp/contents/system/files/nec_manuals/node/540/L43_RG_EN/L_RG_02.html#interconnect-tab
+1. Apply the configuration file.
+1. Check the cluster status with clpstat command.
+   ```
+   [azureuser@centos01 ~]$ sudo clpstat
+    ========================  CLUSTER STATUS  ===========================
+     Cluster : cluster
+     <server>
+      *centos01 ........: Online
+         lankhb1        : Normal           Kernel Mode LAN Heartbeat
+         witnesshb1     : Normal           Witness Heartbeat
+         httpnp1        : Normal           http resolution
+       centos02 ........: Online
+         lankhb1        : Normal           Kernel Mode LAN Heartbeat
+         witnesshb1     : Normal           Witness Heartbeat
+         httpnp1        : Normal           http resolution
+     <group>
+       failover ........: Online
+       (snip)   
+   ```
