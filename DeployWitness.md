@@ -1,4 +1,4 @@
-# Deploy clpwitnessd with ACI
+# Deploy Witness Server
 
 ## Index
 - [Overview](#overview)
